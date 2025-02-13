@@ -8,7 +8,7 @@ NOTE: YOU NEED CUDA VERSION:12.4 TO BE COMPATIBLE WITH THE FOLLOWING DEPENDENCIE
 conda env create -f environment.yml
 ```
 
-To install the dependencies 
+To install the dependencies(run it if you need only the dependencies for the environment you already created)
 ```sh
 pip install -r requirements.txt
 ```
