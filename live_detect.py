@@ -10,6 +10,7 @@ from queue import Queue
 import urllib.request
 import sys
 from numpy.linalg import norm
+import pickle
 
 
 class CameraStream:
@@ -127,42 +128,53 @@ class CameraStream:
 
 
 class FaceRecognitionSystem:
-    def __init__(self, known_dataset_path, threshold=0.4):
+    def __init__(self, known_dataset_path, threshold=0.4, embeddings_file="face_embeddings.pkl"):
         """Initialize face recognition system."""
         self.threshold = threshold
         self.app = FaceAnalysis(name='buffalo_l', providers=[
                                 'CUDAExecutionProvider', 'CPUExecutionProvider'])
         self.app.prepare(ctx_id=0, det_size=(640, 640))
-
+        self.embeddings_file = embeddings_file
         self.known_faces = []
         self.known_labels = []
         self.load_known_faces(known_dataset_path)
 
     def load_known_faces(self, dataset_path):
-        """Load known faces from dataset, using folder names as labels."""
+        """Load known faces from dataset or from a precomputed embeddings file."""
         dataset_path = Path(dataset_path)
 
-        for student_folder in dataset_path.iterdir():
-            if student_folder.is_dir():  # Ensure it's a directory
-                student_name = student_folder.stem  # Folder name as label
+        # Load precomputed embeddings if the file exists
+        if Path(self.embeddings_file).exists():
+            with open(self.embeddings_file, "rb") as f:
+                data = pickle.load(f)
+                self.known_faces = data["embeddings"]
+                self.known_labels = data["labels"]
+            print(
+                f"Loaded precomputed embeddings for {len(self.known_faces)} faces")
+            return
 
-                # Loop through images
+        print("Computing embeddings for the first time...")
+
+        for student_folder in dataset_path.iterdir():
+            if student_folder.is_dir():
+                student_name = student_folder.stem
+
                 for img_path in student_folder.glob("*.jpg"):
                     img = cv2.imread(str(img_path))
-                    # Convert to RGB
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
                     face_info = self.app.get(img)
                     if face_info:
                         embedding = face_info[0].embedding
                         self.known_faces.append(embedding)
-                        # Assign student name as label
                         self.known_labels.append(student_name)
-                        # Debugging
-                        print(
-                            f"Loaded face: {student_name}, Embedding: {embedding[:5]}")
 
-        print(f"Total known faces loaded: {len(self.known_faces)}")
+        # Save embeddings to a file to avoid recomputation in future runs
+        with open(self.embeddings_file, "wb") as f:
+            pickle.dump({"embeddings": self.known_faces,
+                        "labels": self.known_labels}, f)
+
+        print(f"Saved {len(self.known_faces)} face embeddings for future use.")
 
     def recognize_face(self, face_embedding):
         """Recognize a face using cosine similarity."""
